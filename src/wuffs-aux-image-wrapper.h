@@ -1,7 +1,7 @@
 #pragma once
 
 #include <pybind11/numpy.h>
-
+#include <Python.h>
 #include <string>
 #include <unordered_set>
 #include <utility>
@@ -332,16 +332,20 @@ const std::string ImageDecoderError::FailedToOpenFile =
   }
 
   ImageDecodingResult DecodeInternal(wuffs_aux::sync_io::Input& input) {
-    wuffs_aux::DecodeImageResult decode_image_result = wuffs_aux::DecodeImage(
-        *this, input, quirks_, flags_, pixel_blend_, background_color_,
-        max_incl_dimension_, max_incl_metadata_length_);
-    decoding_result_.error_message =
-        std::move(decode_image_result.error_message);
-    if (!decode_image_result.pixbuf.pixcfg.is_valid()) {
+    std::unique_ptr<wuffs_aux::DecodeImageResult> decode_image_result;
+
+    Py_BEGIN_ALLOW_THREADS;
+    decode_image_result = std::make_unique<wuffs_aux::DecodeImageResult>(
+        wuffs_aux::DecodeImage(
+            *this, input, quirks_, flags_, pixel_blend_, background_color_,
+            max_incl_dimension_, max_incl_metadata_length_));
+    Py_END_ALLOW_THREADS;
+    decoding_result_.error_message = std::move(decode_image_result->error_message);
+    if (!decode_image_result->pixbuf.pixcfg.is_valid()) {
       decoding_result_.pixbuf = {};
       decoding_result_.pixcfg = wuffs_base__null_pixel_config();
     } else {
-      decoding_result_.pixcfg = decode_image_result.pixbuf.pixcfg;
+      decoding_result_.pixcfg = decode_image_result->pixbuf.pixcfg;
       decoding_result_.pixbuf =
           decoding_result_.pixbuf.reshape(std::vector<size_t>{
               decoding_result_.pixcfg.height(), decoding_result_.pixcfg.width(),
